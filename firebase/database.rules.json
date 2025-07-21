@@ -1,0 +1,55 @@
+{
+  "rules": {
+    "restaurants": {
+      "$restaurantId": {
+        ".read": "auth != null",
+        ".write": "data.child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin'",
+        "menu": {
+          ".read": "auth != null",
+          ".write": "data.parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin'"
+        },
+        "staffUsers": {
+           ".read": "auth != null && (data.hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')",
+           ".write": "data.hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin'"
+        },
+        "orders": {
+          "$orderId": {
+            ".read": "auth != null && (data.child('customerId').val() === auth.uid || data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')",
+            ".write": "auth != null && (data.child('customerId').val() === auth.uid || data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')",
+            "status": {
+              ".validate": "newData.val() === 'pendiente' || newData.val() === 'en preparacion' || newData.val() === 'listo' || newData.val() === 'entregado' || newData.val() === 'cancelado'",
+              ".write": "auth != null && (data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')"
+            },
+            "customerDetails": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "productDetails": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "subtotal": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "deliveryFee": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "total": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "currency": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "overallSpecs": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "payMethod": { ".write": "auth.uid === data.parent().child('customerId').val() || root.child('users/' + auth.uid).child('role').val() === 'admin'" },
+            "timestamp": { ".write": false },
+            "preparationTime": { ".write": "auth != null && (data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')" },
+            "pickedUpBy": { ".write": "auth != null && (data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')" },
+            "archived": { ".write": "auth != null && (data.parent().parent().child('staffUsers').hasChild(auth.uid) || root.child('users/' + auth.uid).child('role').val() === 'admin')" }
+          }
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users/' + auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users/' + auth.uid).child('role').val() === 'admin')",
+        "role": {
+           ".validate": "newData.val() === 'cliente' || newData.val() === 'restaurante' || newData.val() === 'admin'",
+           ".write": "auth.uid === $uid || root.child('users/' + auth.uid).child('role').val() === 'admin'"
+        },
+        "restaurantId": {
+            ".write": "auth.uid === $uid || root.child('users/' + auth.uid).child('role').val() === 'admin'"
+        }
+      }
+    },
+    ".read": "auth != null",
+    ".write": "root.child('users/' + auth.uid).child('role').val() === 'admin'"
+  }
+}
