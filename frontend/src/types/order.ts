@@ -1,5 +1,5 @@
 // Definición de la interfaz para los detalles del producto dentro de un pedido
-interface ProductDetails {
+export interface ProductDetails {
   productId?: string; // Opcional: referencia al producto original
   name: string;
   quantity: number;

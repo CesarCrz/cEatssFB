@@ -1,31 +1,79 @@
-import React, { useState } from 'react'; // Importamos useState
-import { useNavigate, Link } from 'react-router-dom'; // Importamos useNavigate para redirigir
-import { signInWithEmailAndPassword } from 'firebase/auth'; // Importamos la función de autenticación
-import { auth } from '../firebase-config'; // Importamos la instancia de auth
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { signInWithEmailAndPassword, type User } from 'firebase/auth';
+import { ref, get, child, DataSnapshot } from 'firebase/database'; // Importamos funciones para leer de Realtime Database
+
+import { auth, database } from '../firebase-config'; // Importamos las instancias de auth y database
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null); // Estado para manejar errores de autenticación
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false); // Estado para indicar que estamos cargando (ej. leyendo rol)
 
-  const navigate = useNavigate(); // Hook para navegar
+  const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // Prevenir la recarga de la página
-    setError(null); // Limpiar errores previos
+    e.preventDefault();
+    setError(null);
+    setLoading(true); // Indicar que estamos procesando
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Si el inicio de sesión es exitoso, userCredential.user contiene la información del usuario
-      console.log("Usuario inició sesión:", userCredential.user);
+      const user: User | null = userCredential.user;
 
-      // TODO: Redirigir al usuario según su rol (cliente, restaurante, admin)
-      // Esto se implementará más adelante después de leer el rol de la BD
-      navigate('/'); // Redirigir temporalmente
+      console.log("Usuario inició sesión:", user);
+
+      if (user) {
+          console.log(`Fetching role for user UID: ${user.uid}`);
+          // --- Leer el rol del usuario de la Realtime Database ---
+          const userRef = ref(database, 'users'); // Referencia a la rama 'users'
+          const userSnapshot: DataSnapshot = await get(child(userRef, user.uid)); // Obtener los datos del usuario por UID
+
+          if (userSnapshot.exists()) {
+              const userData = userSnapshot.val();
+              const userRole: string | undefined = userData?.role;
+              const userRestaurantId: string | undefined = userData?.restaurantId; // Obtener el restaurantId si existe
+
+              console.log("User data from DB:", userData);
+              console.log("User role:", userRole);
+
+              // --- Redirigir condicionalmente basado en el rol ---
+              if (userRole === 'restaurante' && userRestaurantId) {
+                  console.log(`Redirecting to restaurant dashboard for ID: ${userRestaurantId}`);
+                  navigate(`/dashboard/restaurant/${userRestaurantId}`, { replace: true }); // Redirigir a panel restaurante
+              } else if (userRole === 'admin') {
+                  console.log("Redirecting to admin dashboard.");
+                  navigate('/dashboard/admin', { replace: true }); // Redirigir a panel admin
+              } else {
+                  // Rol 'cliente' u otro rol no autorizado para acceder a paneles en esta app
+                  // O usuario sin rol definido
+                   console.log(`User role "${userRole}" not authorized for dashboards or missing restaurantId.`);
+                   // TODO: Implementar logout si el rol no es válido para esta app
+                   setError("Tu cuenta no tiene permisos para acceder a este panel."); // Mostrar error
+                   setLoading(false); // Detener carga
+              }
+
+          } else {
+              // Usuario autenticado pero no encontrado en la rama /users de la BD
+              console.error(`User data not found in /users/${user.uid} in the database.`);
+              setError("Error: Datos de usuario incompletos. Contacta al administrador."); // Mostrar error
+              // TODO: Considerar logout automático aquí
+              setLoading(false); // Detener carga
+          }
+
+      } else {
+          // Si userCredential.user es null después de un inicio de sesión exitoso (situación inesperada)
+          console.error("Login successful, but user object is null.");
+          setError("Error en el inicio de sesión. Inténtalo de nuevo."); // Mostrar un error general
+          setLoading(false); // Detener carga
+      }
+
 
     } catch (error: any) {
-      // Manejar errores de autenticación
-      console.error("Error al iniciar sesión:", error.message);
+      console.error("Error al iniciar sesión:", error); // Log detallado del objeto de error
+
+      // Manejar errores de autenticación y mostrar mensaje
       if (error.code === 'auth/invalid-email') {
         setError('Formato de correo electrónico inválido.');
       } else if (error.code === 'auth/user-disabled') {
@@ -37,6 +85,8 @@ const LoginPage: React.FC = () => {
       } else {
         setError('Error al iniciar sesión. Inténtalo de nuevo.');
       }
+       console.log('Error message set:', error.message);
+       setLoading(false); // Detener carga en caso de error de auth
     }
   };
 
@@ -62,6 +112,7 @@ const LoginPage: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading} // Deshabilitar input mientras carga
             />
           </div>
           <div>
@@ -76,14 +127,16 @@ const LoginPage: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={loading} // Deshabilitar input mientras carga
             />
           </div>
           <div className="flex items-center justify-between">
             <button
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-800" // Estilo de botón mejorado, ancho completo
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-700 dark:hover:bg-indigo-800 disabled:opacity-50" // Estilo de botón mejorado, ancho completo, y disabled style
               type="submit"
+              disabled={loading} // Deshabilitar botón mientras carga
             >
-              Iniciar Sesión
+              {loading ? 'Cargando...' : 'Iniciar Sesión'} {/* Texto del botón cambia mientras carga */}
             </button>
           </div>
         </form>
