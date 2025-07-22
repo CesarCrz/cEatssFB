@@ -1,8 +1,7 @@
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 
-// Importa la instancia de la base de datos de Firebase Admin
-import { db } from './firebaseAdmin';
+import { db, admin } from './firebaseAdmin';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -18,7 +17,6 @@ app.get('/', (req, res) => {
   res.send('Backend de Caesar´s Eats funcionando!');
 });
 
-// --- Ruta POST para recibir pedidos ---
 app.post('/api/pedidos', async (req: Request, res: Response) => {
   const orderData = req.body;
 
@@ -32,8 +30,6 @@ app.post('/api/pedidos', async (req: Request, res: Response) => {
     const sucursalName = orderData.sucursal;
     let restaurantId: string | null = null;
 
-    // TODO: Implementar un mapeo seguro y escalable de sucursalName a restaurantId.
-    // Asumimos que sucursalName es el restaurantId por ahora.
     restaurantId = sucursalName;
 
     if (!restaurantId) {
@@ -53,7 +49,6 @@ app.post('/api/pedidos', async (req: Request, res: Response) => {
       archived: false
     };
 
-    // Usar db.ref() y .set() del SDK de Firebase Admin
     const orderRef = db.ref(`restaurants/${restaurantId}/orders/${orderData.orderId}`);
     await orderRef.set(orderToSave);
 
@@ -66,7 +61,61 @@ app.post('/api/pedidos', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Error interno al procesar el pedido.', error: error.message });
   }
 });
-// --- Fin de la Ruta POST para recibir pedidos ---
+
+app.post('/api/createRestaurantUser', async (req: Request, res: Response) => {
+    console.log('Received POST request for /api/createRestaurantUser'); // Added logging
+    const { email, password, restaurantId, role } = req.body; // Extraemos los datos del cuerpo
+
+    console.log('Request to create restaurant user:', { email, restaurantId, role });
+
+    if (!email || !password || !restaurantId || role !== 'restaurante') {
+        console.log('Validation failed: Missing data or invalid role.'); // Added logging
+        return res.status(400).json({ success: false, message: 'Datos de usuario de restaurante incompletos o rol inválido.' });
+    }
+
+    try {
+        console.log(`Attempting to create user in Firebase Auth with email: ${email}`); // Added logging
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+        });
+
+        const uid = userRecord.uid;
+        console.log(`User created in Auth with UID: ${uid}. Attempting to save profile to DB.`); // Added logging
+
+        const userProfileRef = db.ref(`users/${uid}`);
+        await userProfileRef.set({
+            email: email,
+            role: role,
+            restaurantId: restaurantId,
+            createdAt: Date.now(),
+        });
+        console.log(`User profile saved in DB for UID: ${uid}. Attempting to add to staffUsers.`); // Added logging
+
+        const staffUserRef = db.ref(`restaurants/${restaurantId}/staffUsers/${uid}`);
+        await staffUserRef.set(true);
+        console.log(`User ${uid} added to staffUsers for restaurant ${restaurantId}. Sending success response.`); // Added logging
+
+        console.log(`Restaurant user ${email} (${uid}) created and assigned to ${restaurantId}.`);
+
+        res.status(201).json({ success: true, message: 'Usuario de restaurante creado y asignado exitosamente.', uid: uid });
+
+    } catch (error: any) {
+        console.error('Error caught in /api/createRestaurantUser:', error); // Modified logging
+
+        let errorMessage = 'Error interno al crear el usuario de restaurante.';
+        if (error.code === 'auth/email-already-exists') {
+            errorMessage = 'El correo electrónico ya está en uso.';
+        } else if (error.code === 'auth/invalid-email') {
+             errorMessage = 'El formato del correo electrónico es inválido.';
+        } else if (error.code === 'auth/weak-password') {
+             errorMessage = 'La contraseña es demasiado débil.';
+        }
+
+        console.log('Sending error response to frontend.'); // Added logging
+        res.status(500).json({ success: false, message: errorMessage, error: error.message });
+    }
+});
 
 app.listen(port, () => {
   console.log(`Servidor backend escuchando en el puerto ${port}`);
